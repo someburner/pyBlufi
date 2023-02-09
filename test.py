@@ -7,6 +7,7 @@ import sys
 client = blufi.BlufiClient()
 
 client.connectByName('BLUFI_DEVICE')
+# NOTE: See README.md about MTU
 client.setPostPackageLengthLimit(256)
 client.negotiateSecurity()
 client.requestVersion()

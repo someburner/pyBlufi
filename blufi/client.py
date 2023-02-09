@@ -95,7 +95,8 @@ class BlufiClient:
         if lengthLimit <= 0:
             self.mPackageLengthLimit = -1
         else:
-            self.mPackageLengthLimit = max(lengthLimit, MIN_PACKAGE_LENGTH)
+            # subtract 4: 3 for BLE header, 1 reserved (Blufi, unused)
+            self.mPackageLengthLimit = max(lengthLimit-4, MIN_PACKAGE_LENGTH)
 
     async def _disconnect_async(self) -> None:
         """Disconnects from the remote peripheral. Does nothing if already disconnected."""
@@ -157,8 +158,9 @@ class BlufiClient:
         # discover() scan, not an actual connect timeout.
         try:
             await client.connect(timeout=timeout)
-            log.info("MTU: %d" % client.mtu_size)
-            self.mBlufiMTU = client.mtu_size - 4
+            if get_platform_type() != 'Linux':
+                log.info("MTU: %d" % client.mtu_size)
+                self.mBlufiMTU = client.mtu_size - 4
             # This does not seem to connect reliably.
             # await asyncio.wait_for(client.connect(), timeout)
             svc = client.services.get_service(BLUFI_SERVICE_UUID)

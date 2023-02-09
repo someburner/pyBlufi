@@ -1,5 +1,7 @@
 import asyncio
 import contextlib
+import os
+import platform
 
 # Special Event class to use Events with an event loop in another thread
 # https://stackoverflow.com/questions/33000200/asyncio-wait-for-event-from-other-thread
@@ -27,3 +29,21 @@ async def event_wait(evt, timeout):
     with contextlib.suppress(asyncio.TimeoutError):
         await asyncio.wait_for(evt.wait(), timeout)
     return evt.is_set()
+
+def get_platform_type() -> str:
+    """
+    Gets the platform type.
+    """
+    if os.environ.get("P4A_BOOTSTRAP") is not None:
+        return 'Android'
+
+    if platform.system() == "Linux":
+        return 'Linux'
+
+    if platform.system() == "Darwin":
+        return 'Darwin'
+
+    if platform.system() == "Windows":
+        return 'Windows'
+
+    raise Exception(f"Unsupported platform: {platform.system()}")
