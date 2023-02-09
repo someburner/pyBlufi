@@ -181,6 +181,16 @@ class BlufiClient:
         self.mSendSequence = self.mSendSequence & 0xFF
         return self.mSendSequence
 
+    def onError(self, code):
+        log.error("code = %d" % code)
+        if code == WIFI_SCAN_FAIL:
+            log.error("Wifi scan fail")
+        else:
+            log.error("Unknown error")
+
+    def onCustomData(self, data):
+        log.debug("onCustomData[%d] %s" % (len(data), data.hex()))
+
     def parsePublicKey(self, data):
         log.debug("parsePublicKey %d bytes" % len(data))
         self.rxPubKeyBuf.extend(data)
@@ -262,12 +272,12 @@ class BlufiClient:
         # TODO: handle ack checking
 
     def parseCtrlData(self, subType, data):
-        log.debug("parseCtrlData: %d" % subType)
+        log.debug("parseCtrlData: 0x%02X" % subType)
         if subType == CTRL.SUBTYPE_ACK:
             self.parseAck(data)
 
     def parseDataData(self, subType, data):
-        log.debug("parseDataData: %d" % subType)
+        log.debug("parseDataData: 0x%02X" % subType)
         if subType == DATA.SUBTYPE_NEG:
             self.parsePublicKey(data)
         elif subType == DATA.SUBTYPE_VERSION:
@@ -280,6 +290,11 @@ class BlufiClient:
             except Exception as e:
                 log.error('parseWifiScanList error')
                 log.error(e)
+        elif subType == DATA.SUBTYPE_ERROR:
+            errCode = (data[0] & 0xff) if len(data) > 0 else 0xff
+            self.onError(errCode)
+        elif subType == DATA.SUBTYPE_CUSTOM_DATA:
+            self.onCustomData(data)
         else:
             log.error('parseDataData: Unknown subtype')
 
@@ -518,9 +533,10 @@ class BlufiClient:
         self.await_bleak(self.postNegotiateSecurity())
 
         if not self.await_bleak(event_wait(self.secEvent, 5)):
-            log.error('negotiateSecurity failed!')            # ctrlEncrypted, ctrlChecksum, dataEncrypted, dataChecksum
+            log.error('negotiateSecurity failed!')
         else:
             log.info('negotiateSecurity success!')
+            # ctrlEncrypted, ctrlChecksum, dataEncrypted, dataChecksum
             self.await_bleak(self.postSetSecurity(False, False, True, True))
             self.mEncrypted = True
             self.mChecksum = True
@@ -558,3 +574,7 @@ class BlufiClient:
 
         comfirmType = getTypeValue(CTRL.PACKAGE_VALUE, CTRL.SUBTYPE_CONNECT_WIFI)
         self.await_bleak(self.post(False, False, self.mRequireAck, comfirmType, None))
+
+    def postCustomData(self, data: bytearray):
+        type = getTypeValue(DATA.PACKAGE_VALUE, DATA.SUBTYPE_CUSTOM_DATA)
+        self.await_bleak(self.post(self.mEncrypted, self.mChecksum, self.mRequireAck, type, data))

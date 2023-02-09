@@ -23,6 +23,9 @@ TEST_POST_WIFI_CREDS = {
     'pass': 'yourpass'
 }
 
+# Test sending custom data
+TEST_CUSTOM_DATA = False
+
 # Test behavior when disabling rx notifications
 TEST_NOTIFY = False
 
@@ -57,6 +60,9 @@ if TEST_SCAN:
 if TEST_POST_WIFI:
     client.postDeviceMode(blufi.OP_MODE_STA)
     client.postStaWifiInfo(TEST_POST_WIFI_CREDS)
+
+if TEST_CUSTOM_DATA:
+    client.postCustomData(data=bytes.fromhex('010203'))
 
 if TEST_NOTIFY:
     client.stopNotify()
