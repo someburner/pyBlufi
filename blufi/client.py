@@ -114,6 +114,12 @@ class BlufiClient:
         future = asyncio.run_coroutine_threadsafe(coro, self._bleak_loop)
         return future.result(timeout)
 
+    async def _wait(self, timeout: float) -> None:
+        await asyncio.sleep(timeout)
+
+    def wait(self, timeout: float) -> None:
+        return self.await_bleak(self._wait(timeout=timeout))
+
     def onNotify(self, characteristic: BleakGATTCharacteristic, data: bytearray):
         """Simple notification handler which prints the data received."""
         # print("%s: %r" % (characteristic.description, data))

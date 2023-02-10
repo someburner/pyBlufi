@@ -63,6 +63,14 @@ if TEST_POST_WIFI:
 
 if TEST_CUSTOM_DATA:
     client.postCustomData(data=bytes.fromhex('010203'))
+    client.wait(0.5)
+    # Test sending large payload
+    # NOTE: esp32 receives large payloads fine, but appears to break if response
+    # payload is >= 1984 bytes, at least if echoed inside the event handler
+    repeatStr = lambda s, count: ''.join([s for n in range(count)])
+    genStr = lambda count: ''.join([ repeatStr('%X' % n, count) for n in range(16) ])
+    client.postCustomData(data=bytes.fromhex(genStr(240))) # 240 max for echo
+    client.wait(3)
 
 if TEST_NOTIFY:
     client.stopNotify()
