@@ -22,12 +22,8 @@ method. Using `setPostPackageLengthLimit(256)` should work in most cases. If
 the client PC has a requirement for lower MTU, then this must be set lower. Or
 if/when `bleak` can correctly obtain MTU for a given platform, it can be removed.
 
-## Requirements
+## Install
 
-```sh
-# bleak - develop branch
-pip install https://github.com/hbldh/bleak/archive/refs/heads/develop.zip
-# cryptography
-pip install cryptography==38.0.4
-# (later versions don't allow reading certain keys, didn't dig very deep)
+```
+pip install git+https://github.com/someburner/pyBlufi.git
 ```
