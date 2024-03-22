@@ -7,6 +7,7 @@ setup(
     packages=find_packages(),
     install_requires=[
         'cryptography==38.0.4',
-        'bleak==0.21.1'
+        'bleak==0.21.1',
+        'colorlog==6.8.2'
     ],
 )

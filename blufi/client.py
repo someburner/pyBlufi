@@ -10,17 +10,17 @@ import time
 
 from bleak import BleakClient, BleakScanner
 from bleak.backends.characteristic import BleakGATTCharacteristic
+from bleak.backends.device import BLEDevice
+from bleak.backends.scanner import AdvertisementData
 
 from blufi.exceptions import BluetoothError
 from blufi.security import BlufiAES, BlufiCRC, BlufiCrypto
 from blufi.utils import *
 from blufi.constants import *
 from blufi.framectrl import *
+from blufi.utils import *
 
-import logging
-log = logging.getLogger("blufi")
-logging.basicConfig(level=logging.ERROR)
-logging.getLogger("blufi").setLevel(logging.DEBUG)
+log = setup_logger('blufi')
 
 class BlufiClient:
     def __init__(self):
@@ -50,6 +50,8 @@ class BlufiClient:
         self.write_char = None
         self.mWriteChar = None
         self.notifyChar = None
+        # Callbacks
+        self.customDataCb = None
         # Settings
         self.mPackageLengthLimit = -1
         self.mBlufiMTU = -1
@@ -123,6 +125,7 @@ class BlufiClient:
     def onNotify(self, characteristic: BleakGATTCharacteristic, data: bytearray):
         """Simple notification handler which prints the data received."""
         # print("%s: %r" % (characteristic.description, data))
+        # print('onNotify: pkt len = %d' % len(data))
         self.parseNotification(data)
 
     # def connectByAddr(self, addr: str, timeout: float) -> None:
@@ -148,27 +151,116 @@ class BlufiClient:
         self.await_bleak(self._bleak_client.start_notify(BLUFI_NOTIF_CHAR_UUID, self.onNotify))
         self._notify_en = True
 
-    def connectByName(self, name: str, timeout: float = None) -> None:
-        return self.await_bleak(self._connect_async_name(name, timeout=timeout))
+    async def _scan_async_name(self, name: str, timeout: float) -> list:
+        self._reset_state()
+        devices = []
+        def _find_device(dev: BLEDevice, adv: AdvertisementData):
+            # print(dev, adv)
+            adv_name = str(adv.local_name)
+            if adv_name.startswith(name):
+                log.info('Found device: %s', adv_name)
+                if not adv_name in devices:
+                    devices.append(adv_name)
+            return False
+
+        device = await BleakScanner.find_device_by_filter(
+            _find_device, cb=dict(use_bdaddr=False)
+        )
+        return devices
+
+    def scanByName(self, name: str, timeout: float = None) -> None:
+        return self.await_bleak(self._scan_async_name(name, timeout=timeout))
+
+    def connectByName(self, name: str, timeout: float = 60.0) -> None:
+        if get_platform_type() != 'Linux':
+            return self.await_bleak(self._connect_async_name(name, timeout=timeout))
+        else:
+            return self.await_bleak(self._connect_async_name_nix(name, timeout=timeout))
+
+    async def _connect_async_name_nix(self, name: str, timeout: float = 60.0) -> bool:
+        self._reset_state()
+        # TODO: why does esp show up twice in advertisements? two characteristics?
+        stop_event = asyncio.Event()
+        devices = []
+        def _find_device(dev: BLEDevice, adv: AdvertisementData):
+            print(dev)
+            if adv.local_name is not None:
+                if str(adv.local_name).startswith(name):
+                    log.info('Found device: %s', str(adv.local_name))
+                    devices.append(dev)
+                    stop_event.set()
+
+        async with BleakScanner(
+                _find_device,
+                scanning_mode='active',
+                bluez={
+                    # 'RSSI': -60,
+                    # 'Pattern': name,
+                    'DuplicateData': False,
+                    # 'UUIDs': [BLUFI_SERVICE_UUID],
+                    'services': [BLUFI_SERVICE_UUID],
+                    'Transport': 'le'
+                }
+            ) as scanner:
+            await stop_event.wait()
+            # await asyncio.sleep(delay=timeout)
+
+        if len(devices) == 0:
+            print('No devices found')
+            return False
+
+        client = BleakClient(devices[0])
+        try:
+            await client.connect(timeout=timeout)
+            # BlueZ doesn't have a proper way to get the MTU, so we have this hack.
+            # If this doesn't work for you, you can set the client._mtu_size attribute
+            # to override the value instead.
+            if client._backend.__class__.__name__ == "BleakClientBlueZDBus":
+                await client._backend._acquire_mtu()
+            log.info("MTU: %d" % client.mtu_size)
+            # self.mBlufiMTU = client.mtu_size - 4
+            svc = client.services.get_service(BLUFI_SERVICE_UUID)
+            self.notif_char = svc.get_characteristic(BLUFI_NOTIF_CHAR_UUID)
+            self.write_char = svc.get_characteristic(BLUFI_WRITE_CHAR_UUID)
+            await client.start_notify(BLUFI_NOTIF_CHAR_UUID, self.onNotify)
+            self._notify_en = True
+        except asyncio.TimeoutError:
+            # raise BluetoothError("Failed to connect: timeout") from asyncio.TimeoutError
+            return False
+
+        self.connected = True
+        self._bleak_client = client
+        return True
 
     async def _connect_async_name(self, name: str, timeout: float) -> bool:
         self._reset_state()
         # Use cached device if possible, to avoid having BleakClient do
         # a scan again.
-        device = await BleakScanner.find_device_by_name(
-            name, cb=dict(use_bdaddr=False)
+        # device = await BleakScanner.find_device_by_name(
+        #     name, cb=dict(use_bdaddr=False)
+        # )
+        # device = await BleakScanner.find_device_by_filter(
+        #     lambda d, ad: str(ad.local_name).startswith(name), cb=dict(use_bdaddr=False)
+        # )
+
+        # TODO: why does esp show up twice in advertisements? two characteristics?
+        def _find_device(dev: BLEDevice, adv: AdvertisementData):
+            # print(dev, adv)
+            if str(adv.local_name).startswith(name):
+                log.info('Found device: %s', str(adv.local_name))
+                return True
+            return False
+
+        device = await BleakScanner.find_device_by_filter(
+            _find_device, cb=dict(use_bdaddr=False)
         )
 
         client = BleakClient(device)
-        # connect() takes a timeout, but it's a timeout to do a
-        # discover() scan, not an actual connect timeout.
         try:
             await client.connect(timeout=timeout)
             if get_platform_type() != 'Linux':
                 log.info("MTU: %d" % client.mtu_size)
                 self.mBlufiMTU = client.mtu_size - 4
-            # This does not seem to connect reliably.
-            # await asyncio.wait_for(client.connect(), timeout)
             svc = client.services.get_service(BLUFI_SERVICE_UUID)
             self.notif_char = svc.get_characteristic(BLUFI_NOTIF_CHAR_UUID)
             self.write_char = svc.get_characteristic(BLUFI_WRITE_CHAR_UUID)
@@ -194,8 +286,13 @@ class BlufiClient:
         else:
             log.error("Unknown error")
 
+    def setCustomDataCb(self, cb):
+        self.customDataCb = cb
+
     def onCustomData(self, data):
         log.debug("onCustomData[%d] %s" % (len(data), data.hex()))
+        if self.customDataCb:
+            self.customDataCb(data)
 
     def parsePublicKey(self, data):
         log.debug("parsePublicKey %d bytes" % len(data))
@@ -307,8 +404,9 @@ class BlufiClient:
     def parseNotification(self, data):
         seq = int(data[2])
         self.mReadSequence += 1
-        if seq != self.mReadSequence:
+        if seq != self.mReadSequence % 256:
             log.error("seq %d != self.mReadSequence %d" % (seq, self.mReadSequence))
+            self.mReadSequence = seq
         type = int(data[0])
         pkgType = getPackageType(type)
         subType = getSubType(type)
@@ -326,7 +424,7 @@ class BlufiClient:
             dataBytes = aes.decrypt(dataBytes)
 
         if fctl.isChecksum():
-            log.info('got checksum')
+            log.debug('got checksum')
             respChecksum1 = int(data[len(data) - 1])
             respChecksum2 = int(data[len(data) - 2])
 
@@ -342,7 +440,7 @@ class BlufiClient:
                 log.debug("received checksum: ", calcChecksum1, ", ", calcChecksum2)
                 return
             else:
-                log.info("CRC OK!")
+                log.debug("CRC OK!")
                 pass
 
         dataOffset = 0
@@ -447,7 +545,7 @@ class BlufiClient:
                 log.debug("sending seq %d" % sequence)
                 # TODO: verify sequence when ack requested
             await self._bleak_client.write_gatt_char(self.write_char, postBytes, True)
-            await asyncio.sleep(0.05)
+            # await asyncio.sleep(0.05)
 
             if frag:
                 # print("frag waiting")

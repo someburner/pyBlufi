@@ -1,7 +1,6 @@
 # pyBlufi
 
-**NOTE**: This is a WIP. Feel free to clone and try it out, but not installable
-with pip yet.
+**NOTE**: This is a WIP. Feel free to clone and try it out but APIs may change.
 
 Python utility to interface with esp32 Blufi component. Mimics
 [EspBlufiForAndroid](https://github.com/EspressifApp/EspBlufiForAndroid)
@@ -24,6 +23,10 @@ if/when `bleak` can correctly obtain MTU for a given platform, it can be removed
 
 ## Install
 
-```
+```sh
 pip install git+https://github.com/someburner/pyBlufi.git
 ```
+
+## Usages
+
+See `test.py` for example. To try connecting to Wifi, copy `creds.example.py` to `creds.py` and run `./test.py`.

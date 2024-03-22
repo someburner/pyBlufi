@@ -4,6 +4,8 @@ import blufi
 import time
 import sys
 
+from creds import *
+
 ################################################################################
 # Options for misc. tests
 ################################################################################
@@ -17,11 +19,7 @@ TEST_VERSION = True
 TEST_SCAN = False
 
 # Enable/Disable send SSID/Pass
-TEST_POST_WIFI = False
-TEST_POST_WIFI_CREDS = {
-    'ssid': 'yourssid',
-    'pass': 'yourpass'
-}
+TEST_POST_WIFI = True
 
 # Test sending custom data
 TEST_CUSTOM_DATA = False
@@ -34,9 +32,18 @@ TEST_NOTIFY = False
 # Create client instance
 client = blufi.BlufiClient()
 
+SCAN_NAME = None
+
+if 'BLE_SCAN_NAME' in globals():
+    SCAN_NAME = BLE_SCAN_NAME
+else:
+    SCAN_NAME = 'BLUFI_DEVICE'
+
+print('Using scan name: %s' % SCAN_NAME)
+
 # connect to BLUFI_DEVICE
 # NOTE: atexit is used internally to send disconnect before script exits
-client.connectByName('BLUFI_DEVICE')
+client.connectByName(SCAN_NAME)
 
 # Cap pkt size. See README.md about MTU
 client.setPostPackageLengthLimit(256)
@@ -58,8 +65,11 @@ if TEST_SCAN:
         print(item)
 
 if TEST_POST_WIFI:
+    if not 'WIFI_CREDS' in globals():
+        print('\ncreds.py missing or missing required variables! See README.md.\n')
+        sys.exit(1)
     client.postDeviceMode(blufi.OP_MODE_STA)
-    client.postStaWifiInfo(TEST_POST_WIFI_CREDS)
+    client.postStaWifiInfo(WIFI_CREDS)
 
 if TEST_CUSTOM_DATA:
     client.postCustomData(data=bytes.fromhex('010203'))
