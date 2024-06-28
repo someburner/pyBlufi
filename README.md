@@ -22,6 +22,15 @@ method. Using `setPostPackageLengthLimit(256)` should work in most cases. If
 the client PC has a requirement for lower MTU, then this must be set lower. Or
 if/when `bleak` can correctly obtain MTU for a given platform, it can be removed.
 
+As far as MTUs > 256:
+
+1. ESP-IDF defaults to 256, but can be configured to use up to 512.
+
+1. The ESP-IDF Blufi protocol is limited to 256 bytes. You could likely modify
+it if you wanted to, and maybe it could still work with MTU negotiation but I
+have not put much thought into it.
+
+
 ## Install
 
 ```
